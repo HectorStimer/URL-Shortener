@@ -2,7 +2,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/encurtador
     username: encurtador
-    password: encurta123
+    password: encurtador123
   jpa:
     hibernate:
       ddl-auto: none
