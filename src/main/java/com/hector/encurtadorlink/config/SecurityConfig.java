@@ -27,7 +27,7 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
 
                         // o resto exige login
-                        .anyRequest().authenticated()
+                        .anyRequest().permitAll()
                 );
         return http.build();
     }
