@@ -1,4 +1,10 @@
 spring:
+  devtools:
+    restart:
+      enabled: false
+  jwt:
+    secret: uvCRlqGHmsxapZDgoeE0LgvsKcMCiAuN
+    expiration: 3600000
   datasource:
     url: jdbc:postgresql://localhost:5432/encurtador
     username: encurtador
