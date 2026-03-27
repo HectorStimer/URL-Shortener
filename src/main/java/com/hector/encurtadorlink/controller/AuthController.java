@@ -37,7 +37,7 @@ public class AuthController {
         User createdUser = new User(
                 user.email(),
                 user.name(),
-                "", // senha não vem no DTO, mas não usamos aqui
+                "",
                 user.role()
         );
 
