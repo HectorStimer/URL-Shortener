@@ -13,13 +13,17 @@ public class AuthService {
 
     private final UserRepository repository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
-    public AuthService(UserRepository repository, PasswordEncoder passwordEncoder){
+    public AuthService(UserRepository repository,
+                       PasswordEncoder passwordEncoder,
+                       JwtService jwtService){
         this.repository = repository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
-    public User authenticate(String email, String password){
+    public String login(String email, String password){
 
         User user = repository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Invalid credentials"));
@@ -28,7 +32,7 @@ public class AuthService {
             throw new RuntimeException("Invalid credentials");
         }
 
-        return user;
+        return jwtService.generateToken(user);
     }
 }
 
