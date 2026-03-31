@@ -1,244 +1,194 @@
-# Encurtador de Link com Analytics
+# 🔗 Encurtador de URL com Analytics
 
-API REST para encurtamento de URLs com autenticação JWT, persistência em PostgreSQL e cache com Redis.
+API REST para encurtamento de URLs com sistema de analytics, cache com Redis, autenticação JWT e documentação automática com Swagger.
 
-## Visão geral
+---
 
-Este projeto implementa um encurtador de links com:
+## Sobre o projeto
 
-- cadastro e login de usuários;
-- criação e exclusão de URLs encurtadas;
-- consulta de estatísticas de cliques por URL;
-- segurança com Spring Security + JWT;
-- versionamento de banco com Flyway.
+O sistema permite encurtar URLs longas gerando códigos curtos únicos em Base62. Cada acesso ao link curto é registrado de forma assíncrona, permitindo visualizar estatísticas de cliques por URL. O projeto foi construído com foco em boas práticas de engenharia — separação de camadas, cache, segurança e testes.
 
-## Stack utilizada
+---
 
-- Java 17
-- Spring Boot 4
-- Spring Web
-- Spring Security
-- Spring Data JPA
-- PostgreSQL
-- Flyway
-- Redis (cache)
-- SpringDoc OpenAPI (Swagger)
+## Decisões técnicas
+
+**Por que Redis para cache?**
+O redirecionamento precisa ser sub-100ms. Buscar no PostgreSQL a cada acesso adicionaria latência desnecessária. Com `@Cacheable` no Spring, a primeira chamada vai ao banco e as seguintes vêm do Redis — o dado raramente muda depois de criado, então o cache é válido por horas.
+
+**Por que `@Async` no registro de cliques?**
+O redirecionamento é o caminho crítico da aplicação — o usuário não pode esperar. Salvar o clique no banco é uma operação secundária que não precisa bloquear a resposta. Com `@Async`, o redirect acontece imediatamente e o clique é salvo em background por outra thread.
+
+**Por que Flyway e não `ddl-auto`?**
+O `ddl-auto=update` do Hibernate é imprevisível em produção — nunca remove colunas e pode causar inconsistências entre ambientes. Com Flyway, cada mudança no banco é um arquivo SQL versionado, commitado no Git, que roda na ordem certa em qualquer ambiente automaticamente.
+
+**Por que Base62 e não UUID?**
+UUID gera strings de 36 caracteres. Base62 com 6 caracteres já oferece mais de 56 bilhões de combinações — mais que suficiente — e gera URLs curtas de verdade, que é o propósito do projeto.
+
+---
+
+## Stack
+
+- **Java 17** + **Spring Boot 4.0.3**
+- **Spring Security** + **JWT** (jjwt 0.12.6)
+- **Spring Data JPA** + **PostgreSQL**
+- **Spring Cache** + **Redis**
+- **Flyway** — migrations versionadas
+- **Springdoc OpenAPI 3.0** — documentação automática
+- **Bucket4j** — rate limiting por IP
+- **Testcontainers** — testes de integração com infraestrutura real
+- **Docker Compose** — ambiente local
+
+---
+
+## Endpoints
+
+| Método | Endpoint | Descrição | Auth |
+|--------|----------|-----------|------|
+| POST | `/api/v1/auth/register` | Cria uma conta | Não |
+| POST | `/api/v1/auth/login` | Autentica e retorna JWT | Não |
+| POST | `/api/v1/url` | Encurta uma URL | Sim |
+| GET | `/{shortCode}` | Redireciona para a URL original | Não |
+| DELETE | `/api/v1/url/{id}` | Remove uma URL | Sim |
+| GET | `/api/v1/stats/{shortCode}` | Retorna analytics da URL | Sim |
+
+---
+
+## Como rodar localmente
+
+### Pré-requisitos
+
+- Java 17+
+- Docker e Docker Compose
 - Maven
+
+### Passo a passo
+
+**1. Clone o repositório**
+```bash
+git clone https://github.com/seu-usuario/encurtadorLink.git
+cd encurtadorLink
+```
+
+**2. Suba o PostgreSQL e o Redis**
+```bash
+docker-compose up -d
+```
+
+**3. Configure as variáveis de ambiente**
+
+Crie um arquivo `.env` na raiz ou configure as variáveis no `application.yml`:
+```yaml
+jwt:
+  secret: sua-chave-secreta-aqui-minimo-32-caracteres
+  expiration: 3600000
+```
+
+**4. Rode a aplicação**
+```bash
+mvn spring-boot:run
+```
+
+A aplicação sobe na porta `8080`. O Flyway cria as tabelas automaticamente na primeira inicialização.
+
+---
+
+## Documentação da API
+
+Com a aplicação rodando, acesse o Swagger UI:
+
+```
+http://localhost:8080/swagger-ui.html
+```
+
+Todos os endpoints estão documentados com exemplos de request e response.
+
+### Autenticação no Swagger
+
+1. Faça `POST /api/v1/auth/register` ou `POST /api/v1/auth/login`
+2. Copie o token retornado
+3. Clique em **Authorize** no topo do Swagger UI
+4. Cole o token no formato: `Bearer seu-token-aqui`
+5. Agora os endpoints autenticados estão liberados
+
+---
+
+## Exemplo de uso
+
+**Registrar e autenticar**
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "hector@email.com", "name": "Hector", "password": "senha123"}'
+```
+
+**Encurtar uma URL**
+```bash
+curl -X POST http://localhost:8080/api/v1/url \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer seu-token-aqui" \
+  -d '{"originalUrl": "https://www.google.com.br", "expiresAt": "2026-12-31T23:59:59"}'
+```
+
+**Resposta:**
+```json
+{
+  "originalUrl": "https://www.google.com.br",
+  "shortCode": "UjFP4H",
+  "shortUrl": "http://localhost:8080/UjFP4H",
+  "createdAt": "2026-03-25T08:38:49",
+  "expiresAt": "2026-12-31T23:59:59"
+}
+```
+
+**Acessar o link curto**
+```bash
+curl -L http://localhost:8080/UjFP4H
+# Redireciona para https://www.google.com.br
+```
+
+**Ver analytics**
+```bash
+curl http://localhost:8080/api/v1/stats/UjFP4H \
+  -H "Authorization: Bearer seu-token-aqui"
+```
+
+---
 
 ## Estrutura do projeto
 
 ```
-src/main/java/com/hector/encurtadorlink
-├── config          # Segurança, Redis e Async
-├── controller      # Endpoints REST
-├── dto             # Requests e Responses
-├── exception       # Exceções de domínio e handler global
-├── model           # Entidades JPA
-├── repository      # Repositórios Spring Data
-└── service         # Regras de negócio e JWT
+src/main/java/com/hector/encurtadorlink/
+├── controller/       # Endpoints REST
+├── service/          # Lógica de negócio
+├── repository/       # Acesso ao banco
+├── model/            # Entidades JPA
+├── dto/
+│   ├── request/      # Objetos de entrada
+│   └── response/     # Objetos de saída
+├── exception/        # Exceções customizadas e GlobalExceptionHandler
+└── config/           # SecurityConfig, RedisConfig, AsyncConfig
 
-src/main/resources
+src/main/resources/
 ├── application.yml
-└── db/migration    # Scripts Flyway (V1, V2, V3)
+└── db/migration/     # Migrations Flyway (V1, V2, V3...)
 ```
 
-## Requisitos
+---
 
-- Java 17+
-- Maven 3.9+ (ou uso do wrapper `mvnw`)
-- Docker e Docker Compose (para PostgreSQL e Redis)
+## Variáveis de ambiente em produção
 
-## Configuração de ambiente
+| Variável | Descrição |
+|----------|-----------|
+| `SPRING_DATASOURCE_URL` | URL de conexão do PostgreSQL |
+| `SPRING_DATASOURCE_USERNAME` | Usuário do banco |
+| `SPRING_DATASOURCE_PASSWORD` | Senha do banco |
+| `SPRING_REDIS_HOST` | Host do Redis |
+| `SPRING_REDIS_PORT` | Porta do Redis |
+| `JWT_SECRET` | Chave secreta para assinar os tokens |
+| `JWT_EXPIRATION` | Tempo de expiração do token em ms |
 
-As configurações atuais estão em `src/main/resources/application.yml`:
+---
 
-- API: `http://localhost:8080`
-- PostgreSQL: `localhost:5432` (db `encurtador`)
-- Redis: `localhost:6379`
-- JWT secret e expiração configurados em `jwt.secret` e `jwt.expiration`
+## Autor
 
-> Recomendação: em produção, mova segredo JWT e credenciais para variáveis de ambiente.
-
-## Subindo dependências com Docker
-
-No diretório raiz:
-
-```bash
-docker compose up -d
-```
-
-Serviços criados:
-
-- `encurtador-db` (PostgreSQL 16)
-- `redis`
-
-## Executando o projeto
-
-### Com Maven Wrapper (recomendado)
-
-No Windows:
-
-```bash
-.\mvnw.cmd spring-boot:run
-```
-
-No Linux/macOS:
-
-```bash
-./mvnw spring-boot:run
-```
-
-### Build
-
-```bash
-./mvnw clean package
-```
-
-## Banco de dados e migrações
-
-As migrações Flyway ficam em `src/main/resources/db/migration`:
-
-- `V1__create_urls_table.sql`
-- `V2__create_clicks_table.sql`
-- `V3__create_users_table.sql`
-
-Ao iniciar a aplicação, as migrações são aplicadas automaticamente.
-
-## Documentação da API
-
-Após subir a aplicação:
-
-- Swagger UI: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
-- OpenAPI JSON: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
-
-## Autenticação
-
-A API usa JWT no header:
-
-```
-Authorization: Bearer <token>
-```
-
-Rotas públicas:
-
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- documentação Swagger (`/swagger-ui/**`, `/v3/api-docs/**`)
-
-Demais rotas exigem token.
-
-## Endpoints principais
-
-### Auth
-
-#### `POST /api/v1/auth/register`
-
-Cria usuário e retorna token JWT.
-
-Exemplo request:
-
-```json
-{
-  "email": "usuario@email.com",
-  "name": "Usuario",
-  "password": "123456"
-}
-```
-
-Exemplo response:
-
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiJ9..."
-}
-```
-
-#### `POST /api/v1/auth/login`
-
-Autentica usuário e retorna token JWT.
-
-Exemplo request:
-
-```json
-{
-  "email": "usuario@email.com",
-  "password": "123456"
-}
-```
-
-### Usuários
-
-#### `POST /api/v1/users/`
-
-Cria usuário (rota protegida no estado atual da configuração de segurança).
-
-### URLs
-
-#### `POST /api/v1/url/`
-
-Cria URL encurtada.
-
-Exemplo request:
-
-```json
-{
-  "originalUrl": "https://www.exemplo.com/pagina",
-  "expiresAt": "2026-12-31T23:59:59"
-}
-```
-
-Exemplo response:
-
-```json
-{
-  "originalUrl": "https://www.exemplo.com/pagina",
-  "shortCode": "a1B2c3",
-  "shortUrl": "https://dominio.com/a1B2c3",
-  "createdAt": "2026-03-27T10:00:00",
-  "expiresAt": "2026-12-31T23:59:59"
-}
-```
-
-#### `GET /api/v1/url/{shortCode}`
-
-Retorna redirecionamento HTTP 302 para a URL original (se existir e não estiver expirada).
-
-#### `DELETE /api/v1/url/{id}`
-
-Exclui uma URL pelo `id`.
-
-### Estatísticas
-
-#### `GET /api/v1/stats/{shortCode}/`
-
-Retorna estatísticas da URL:
-
-- dados da URL;
-- total de cliques;
-- agrupamento de cliques por dia.
-
-## Códigos de status e erros
-
-Tratados pelo `GlobalExceptionHandler`:
-
-- `404 Not Found`: URL não encontrada (`UrlNotFoundException`)
-- `410 Gone`: URL expirada (`UrlExpiredException`)
-
-Outros erros podem retornar comportamento padrão do Spring Boot, dependendo do tipo de exceção.
-
-## Testes
-
-Executar:
-
-```bash
-./mvnw test
-```
-
-Atualmente existe teste básico de carregamento de contexto (`contextLoads`).
-
-## Observações importantes do estado atual
-
-- O campo `shortUrl` retornado é montado com domínio fixo (`https://dominio.com/`).
-- O registro de clique existe no serviço (`ClickService`), mas ainda não está integrado ao fluxo de redirecionamento.
-- O `application.yml` atual contém segredo JWT e credenciais fixas para ambiente local.
-
+Feito por **Hector** — projeto desenvolvido para portfólio com foco em boas práticas Spring Boot.
