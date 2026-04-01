@@ -69,23 +69,30 @@ git clone https://github.com/seu-usuario/encurtadorLink.git
 cd encurtadorLink
 ```
 
-**2. Suba o PostgreSQL e o Redis**
+### Rodar tudo no Docker
+
+Na raiz do projeto (com Docker rodando):
+
 ```bash
-docker-compose up -d
+docker compose up --build
 ```
 
-**3. Configure as variáveis de ambiente**
+Isso sobe PostgreSQL, Redis e a API Spring Boot. A API usa o perfil `docker` (`application-docker.yml`), apontando para os serviços `postgres` e `redis` da rede do Compose.
 
-Crie um arquivo `.env` na raiz ou configure as variáveis no `application.yml`:
-```yaml
-jwt:
-  secret: sua-chave-secreta-aqui-minimo-32-caracteres
-  expiration: 3600000
+- API: `http://localhost:8080`
+- Swagger: `http://localhost:8080/swagger-ui/index.html`
+
+Só infra (Postgres + Redis), sem a app:
+
+```bash
+docker compose up postgres redis
 ```
 
-**4. Rode a aplicação**
+Para rebuild após mudanças no código:
+
 ```bash
-mvn spring-boot:run
+docker compose build --no-cache app
+docker compose up
 ```
 
 A aplicação sobe na porta `8080`. O Flyway cria as tabelas automaticamente na primeira inicialização.
