@@ -6,14 +6,14 @@ API REST para encurtamento de URLs com sistema de analytics, cache com Redis, au
 
 ## Sobre o projeto
 
-O sistema permite encurtar URLs longas gerando códigos curtos únicos em Base62. Cada acesso ao link curto é registrado de forma assíncrona, permitindo visualizar estatísticas de cliques por URL. O projeto foi construído com foco em boas práticas de engenharia — separação de camadas, cache, segurança e testes.
+O sistema permite encurtar URLs longas gerando códigos curtos únicos em Base62. Cada acesso ao link curto é registrado de forma assíncrona, permitindo visualizar estatísticas de cliques por URL. O projeto foi construído com foco em boas práticas de engenharia, separação de camadas, cache, segurança e testes.
 
 ---
 
 ## Decisões técnicas
 
 **Por que Redis para cache?**
-O redirecionamento precisa ser sub-100ms. Buscar no PostgreSQL a cada acesso adicionaria latência desnecessária. Com `@Cacheable` no Spring, a primeira chamada vai ao banco e as seguintes vêm do Redis — o dado raramente muda depois de criado, então o cache é válido por horas.
+O redirecionamento precisa ser sub-100ms. Buscar no PostgreSQL a cada acesso adicionaria latência desnecessária. Com `@Cacheable` no Spring, a primeira chamada vai ao banco e as seguintes vêm do Redis. O dado raramente muda depois de criado, então o cache é válido por horas.
 
 **Por que `@Async` no registro de cliques?**
 O redirecionamento é o caminho crítico da aplicação — o usuário não pode esperar. Salvar o clique no banco é uma operação secundária que não precisa bloquear a resposta. Com `@Async`, o redirect acontece imediatamente e o clique é salvo em background por outra thread.
@@ -22,7 +22,7 @@ O redirecionamento é o caminho crítico da aplicação — o usuário não pode
 O `ddl-auto=update` do Hibernate é imprevisível em produção — nunca remove colunas e pode causar inconsistências entre ambientes. Com Flyway, cada mudança no banco é um arquivo SQL versionado, commitado no Git, que roda na ordem certa em qualquer ambiente automaticamente.
 
 **Por que Base62 e não UUID?**
-UUID gera strings de 36 caracteres. Base62 com 6 caracteres já oferece mais de 56 bilhões de combinações — mais que suficiente — e gera URLs curtas de verdade, que é o propósito do projeto.
+UUID gera strings de 36 caracteres. Base62 com 6 caracteres já oferece mais de 56 bilhões de combinações, mais que suficiente, e gera URLs curtas de verdade, que é o propósito do projeto.
 
 ---
 
@@ -57,9 +57,7 @@ UUID gera strings de 36 caracteres. Base62 com 6 caracteres já oferece mais de 
 
 ### Pré-requisitos
 
-- Java 17+
 - Docker e Docker Compose
-- Maven
 
 ### Passo a passo
 
